@@ -20,6 +20,13 @@ from datetime import datetime, timedelta
 import google.generativeai as genai
 import os
 
+
+# Preferred models ordered by cost/speed balance and broad availability.
+PREFERRED_GEMINI_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+]
+
 # Page configuration
 st.set_page_config(
     page_title="EV Analytics Dashboard",
@@ -69,6 +76,29 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Initialize Gemini AI
+def _resolve_gemini_model_name():
+    """Choose a Gemini model that supports generateContent."""
+    try:
+        available = []
+        for model in genai.list_models():
+            methods = getattr(model, "supported_generation_methods", []) or []
+            if "generateContent" in methods:
+                available.append(model.name.replace("models/", ""))
+
+        for preferred in PREFERRED_GEMINI_MODELS:
+            if preferred in available:
+                return preferred
+
+        if available:
+            # Use any available model as a fallback if preferred ones are absent.
+            return available[0]
+    except Exception:
+        # If listing models fails (network/permissions), use the safest default.
+        pass
+
+    return PREFERRED_GEMINI_MODELS[0]
+
+
 @st.cache_resource
 def init_gemini():
     """Initialize Gemini AI model"""
@@ -76,7 +106,7 @@ def init_gemini():
         api_key = os.getenv("GEMINI_API_KEY", "")
         if api_key:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-pro')
+            model = genai.GenerativeModel(_resolve_gemini_model_name())
             return model
         return None
     except Exception as e:
@@ -996,7 +1026,7 @@ def main():
             global gemini_model
             try:
                 genai.configure(api_key=api_key)
-                gemini_model = genai.GenerativeModel('gemini-pro')
+                gemini_model = genai.GenerativeModel(_resolve_gemini_model_name())
                 st.success("✅ API Key configured!")
             except Exception as e:
                 st.error(f"Failed to configure API: {e}")
